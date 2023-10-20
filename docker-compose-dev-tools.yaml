@@ -1,0 +1,77 @@
+version: '3.8'
+services:
+  ## Local Dev Service Playground
+  mongo:
+    image: library/mongo:6.0.1
+    container_name: local-dev-mongo
+    ports:
+      - '27017:27017'
+    environment:
+      - MONGO_DATA_DIR=/data/db
+      - MONGO_LOG_DIR=/dev/null
+    volumes:
+      - mongo-data:/mongodata
+    healthcheck:
+      test: echo 'db.stats().ok' | mongo localhost:27017/test --quiet
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: local-dev-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=yourStrong(!)Password
+      - MSSQL_PID=developer
+    ports:
+      - '1433:1433'
+
+  redis:
+    container_name: local-dev-redis
+    image: library/redis:alpine3.12
+    command: ['redis-server', '--appendonly', 'yes']
+    hostname: redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/redisdata
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  rabbitmq:
+    container_name: local-dev-rabbitmq
+    image: 'bitnami/rabbitmq:latest'
+    ports:
+      - 15672:15672
+      - 5672:5672
+    environment:
+      - RABBITMQ_USERNAME=admin
+      - RABBITMQ_PASSWORD=foobar
+      - RABBITMQ_ERL_COOKIE=locals3cr3tc00ki31
+      - RABBITMQ_DEFAULT_VHOST=local-dev
+    volumes:
+      - 'rmq-data:/bitnami'
+    healthcheck:
+      test: ['CMD', 'rabbitmqctl', 'status']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  elasticsearch:
+    container_name: local-dev-elasticsearch
+    image: library/elasticsearch:6.8.11
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    environment:
+      - discovery.type=single-node
+
+
+volumes:
+  redis-data: {}
+  mongo-data: {}
+  rmq-data: {}

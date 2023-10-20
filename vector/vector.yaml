@@ -1,0 +1,72 @@
+api:
+  address: 127.0.0.1:8686
+  enabled: true
+  playground: false
+data_dir: /var/lib/vector
+
+sources:
+  file_log:
+    type: file
+    include:
+      - /var/log/logs/*.log
+
+  host_metrics:
+    type: host_metrics
+
+  # Waiting for Metrics support then we wont need otel https://github.com/vectordotdev/vector/issues/1444
+  # open_telemetry:
+  #   type: opentelemetry
+  #   grpc:
+  #     address: 0.0.0.0:4317
+
+transforms:
+  file_log_remapped:
+    type: remap
+    inputs:
+      - file_log
+    source: |-
+      tmp = parse_json!(string!(.message))
+      if !exists(tmp.app) {
+        .app = "missing-app-name"
+      }
+      if !exists(tmp.cl) {
+        .cluster = "missing-cluster-name"
+      }
+      if !exists(tmp.env) {
+        .env = "missing-env"
+      }
+      .app = tmp.app
+      .cluster = tmp.cl
+      .env = tmp.env
+
+sinks:
+  loki_exporter:
+    acknowledgements: false
+    type: loki
+    compression: snappy
+    encoding:
+      codec: text
+      timestamp_format: rfc3339
+    endpoint: http://loki:3100
+    healthcheck:
+      enabled: false
+    inputs:
+      - file_log_remapped
+    labels:
+      exporter: 'vector'
+      app: '{{ .app }}' #Extracts app from the log entry
+      cluster: '{{ .cluster }}' #Extracts app from the log entry
+      env: '{{ .env }}' #Extracts app from the log entry
+    # labels:
+    #   k8.app: '{{ kubernetes.pod_labels.app }}'
+    #   cluster: dev-cluster
+    #   container: '{{ kubernetes.container_image }}'
+    #   forwarder: vector
+    #   ip: '{{ kubernetes.pod_ip }}'
+    #   namespace: '{{ kubernetes.pod_namespace }}'
+    #   pod: '{{ kubernetes.pod_name }}'
+  prometheus_write:
+    type: prometheus_remote_write
+    inputs:
+      - host_metrics
+    endpoint: http://prometheus:9090/api/v1/write

@@ -1,0 +1,97 @@
+version: '3.8'
+services:
+  ## Our Cloud tooling
+
+  # OpenTelemetry Collector
+  otel-collector:
+    container_name: otel-collector
+    image: otel/opentelemetry-collector-contrib:0.78.0
+    volumes:
+      - ./otel/otel-config.yaml:/etc/otel/config.yaml
+      - ./log:/log/otel
+    command: --config /etc/otel/config.yaml
+    environment:
+      TRACE_ENDPOINT: 'tempo:4317'
+      LOKI_ENDPOINT: 'http://loki:3100/loki/api/v1/push'
+    ports:
+      - '13133:13133' # health_check extension
+      - '4317:4317'
+    depends_on:
+      - tempo
+      - prometheus
+      - loki
+
+  vector:
+    container_name: vector
+    image: timberio/vector:0.33.0-debian
+    ports:
+      - '8686:8686'
+    volumes:
+      - ./vector/vector.yaml:/etc/vector/vector.yaml
+      - ./dotnetlogs/:/var/log/dotnet/
+      - vector_data:/var/lib/vector
+    # environment:
+    #   VECTOR_LOG: debug
+
+  ## Grafana Cloud
+  tempo:
+    container_name: local-grafanacloud-tempo
+    image: grafana/tempo:latest
+    command: ['-config.file=/etc/tempo.yaml']
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo.yaml
+      - tempo_data:/tmp/tempo
+
+  prometheus:
+    container_name: local-grafanacloud-prometheus
+    image: prom/prometheus:latest
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yaml
+      - prometheus_data:/prometheus
+    ports:
+      - '9099:9090'
+
+  loki:
+    container_name: local-grafanacloud-loki
+    image: grafana/loki:latest
+    ports:
+      - '3100:3100'
+    volumes:
+      - ./loki/loki.yaml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+
+  grafana:
+    container_name: local-grafanacloud-grafana
+    image: grafana/grafana:10.1.2-ubuntu
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
+    env_file:
+      - ./grafana/config.monitoring
+    ports:
+      - '3000:3000'
+
+  alertmanager:
+    container_name: local-grafanacloud-alertmanager
+    image: prom/alertmanager
+    ports:
+      - 9093:9093
+    volumes:
+      - ./alertmanager/:/etc/alertmanager/
+      - alertmanager_data:/alertmanager
+    restart: always
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+
+volumes:
+  prometheus_data: {}
+  grafana_data: {}
+  loki_data: {}
+  tempo_data: {}
+  vector_data: {}
+  alertmanager_data: {}

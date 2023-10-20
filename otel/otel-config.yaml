@@ -1,0 +1,72 @@
+extensions:
+  health_check:
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+
+processors:
+  # Data sources: traces
+  attributes:
+    actions:
+      - key: cluster
+        value: dev-cluster
+        action: insert
+  # Data sources: traces, metrics, logs
+  batch:
+
+  # Data sources: traces, metrics, logs
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 4000
+    spike_limit_mib: 500
+
+  # Data sources: traces
+  resource:
+    attributes:
+      - key: k8s.cluster.name
+        from_attribute: k8s-cluster
+        action: insert
+
+  # # Data sources: traces
+  # probabilistic_sampler:
+  #   hash_seed: 22
+  #   sampling_percentage: 15
+
+exporters:
+  logging:
+    # verbosity: detailed
+  otlp:
+    endpoint: '${TRACE_ENDPOINT}'
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: '0.0.0.0:8889'
+  loki:
+    endpoint: '${LOKI_ENDPOINT}'
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+      processors: [batch]
+      exporters:
+        - otlp
+    metrics:
+      receivers:
+        - otlp
+      processors: [batch]
+      exporters:
+        - prometheus
+    logs:
+      receivers:
+        - otlp
+      processors: [batch]
+      exporters:
+        - loki
+  extensions:
+    - health_check
